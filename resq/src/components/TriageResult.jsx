@@ -1,62 +1,55 @@
 import { CheckCircle, Clock } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function TriageResult({ triage }) {
-  const getSeverityColor = (sev) => {
-    if (sev === 'critical') return 'var(--critical-color)';
-    if (sev === 'moderate') return 'var(--warning-color)';
-    return 'var(--safe-color)';
-  };
+  const isCritical = triage.severity === 'critical';
+  const isMod = triage.severity === 'moderate';
+  
+  const borderColor = isCritical ? 'border-accent-red' : isMod ? 'border-accent-amber' : 'border-accent-green';
+  const bgColor = isCritical ? 'bg-accent-red' : isMod ? 'bg-accent-amber' : 'bg-accent-green';
 
   return (
-    <div className={`card severity-border-${triage.severity}`}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className={`bg-slate border-l-4 ${borderColor} border-y border-r border-slate-border rounded-r-xl p-6 shadow-lg`}>
+      <div className="flex justify-between items-start mb-6">
         <div>
-          <span style={{ 
-            backgroundColor: getSeverityColor(triage.severity), 
-            color: '#000', 
-            padding: '0.25rem 0.5rem', 
-            borderRadius: '4px', 
-            fontWeight: 'bold', 
-            textTransform: 'uppercase',
-            fontSize: '0.8rem'
-          }}>
+          <span className={`${bgColor} text-black px-3 py-1 rounded text-xs font-bold uppercase tracking-wider`}>
             {triage.severity}
           </span>
-          <h3 style={{ marginTop: '0.5rem' }}>AI Triage Summary</h3>
-          <p className="text-muted">{triage.summary}</p>
+          <h3 className="text-xl font-bold mt-3 mb-1">AI Triage Summary</h3>
+          <p className="text-slate-400 text-sm">{triage.summary}</p>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--action-color)' }}>
-          <Clock size={16} />
-          <span className="mono-text" style={{ fontSize: '0.9rem' }}>ETA: {triage.estimatedResponseTime}</span>
+        <div className="flex items-center gap-2 text-accent-blue bg-accent-blue/10 px-3 py-1.5 rounded-full">
+          <Clock size={14} />
+          <span className="mono-text text-sm font-semibold">ETA: {triage.estimatedResponseTime}</span>
         </div>
       </div>
 
-      <div style={{ backgroundColor: '#0A0C10', padding: '1rem', borderRadius: '4px', marginBottom: '1rem', border: '1px solid var(--border-color)' }}>
-        <h4 style={{ marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Response Instructions</h4>
-        <ol style={{ paddingLeft: '1.2rem', margin: 0 }} className="mono-text">
+      <div className="bg-navy p-4 rounded-lg border border-slate-border mb-6">
+        <h4 className="text-slate-400 text-xs font-bold mb-3 uppercase tracking-wide">Response Instructions</h4>
+        <ol className="mono-text text-sm text-slate-200 pl-4 list-decimal marker:text-slate-500 space-y-2">
           {triage.instructions?.map((inst, idx) => (
-            <li key={idx} style={{ marginBottom: '0.25rem', color: 'var(--text-primary)' }}>{inst}</li>
+            <li key={idx}>{inst}</li>
           ))}
         </ol>
       </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <h4 style={{ marginBottom: '0.5rem', color: 'var(--text-muted)' }}>Resources Needed</h4>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+      <div className="mb-6">
+        <h4 className="text-slate-400 text-xs font-bold mb-3 uppercase tracking-wide">Resources Needed</h4>
+        <div className="flex flex-wrap gap-2">
           {triage.resourcesNeeded?.map((res, idx) => (
-            <span key={idx} style={{ backgroundColor: 'var(--surface-color)', border: '1px solid var(--border-color)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.85rem' }}>
+            <span key={idx} className="bg-slate-light border border-slate-border px-3 py-1 rounded-full text-xs text-slate-300">
               {res}
             </span>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--safe-color)', marginTop: '1rem' }}>
-        <CheckCircle size={20} />
-        <span style={{ fontWeight: 'bold' }}>Help is on the way</span>
-        <span className="mono-text text-muted" style={{ marginLeft: 'auto', fontSize: '0.8rem' }}>ID: #RQ-{triage.incidentId?.substring(0, 4).toUpperCase()}</span>
+      <div className="flex items-center gap-2 text-accent-green mt-4 pt-4 border-t border-slate-border">
+        <CheckCircle size={18} />
+        <span className="font-bold text-sm">Help is on the way</span>
+        <span className="mono-text text-slate-500 ml-auto text-xs">ID: #RQ-{triage.incidentId?.substring(0, 4).toUpperCase()}</span>
       </div>
-    </div>
+    </motion.div>
   );
 }

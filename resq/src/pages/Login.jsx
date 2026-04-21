@@ -5,9 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { auth, googleProvider, db } from '../services/firebase';
 import { useAuth } from '../hooks/useAuth';
 import { ShieldAlert, User, Shield, UserCog } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function Login() {
-  const [step, setStep] = useState('login'); // 'login' or 'role_selection'
+  const [step, setStep] = useState('login'); 
   const [tempUser, setTempUser] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const navigate = useNavigate();
@@ -41,16 +42,15 @@ export default function Login() {
         uid: tempUser.uid,
         name: tempUser.displayName || 'Unknown User',
         role: selectedRole,
-        department: selectedRole === 'responder' ? 'security' : '', // default
+        department: selectedRole === 'responder' ? 'security' : '', 
         createdAt: serverTimestamp()
       });
 
       if (selectedRole === 'responder') {
-        // Also create a responder doc
         await setDoc(doc(db, 'responders', tempUser.uid), {
           uid: tempUser.uid,
           name: tempUser.displayName || 'Unknown User',
-          department: 'security', // Can be updated later
+          department: 'security',
           available: true,
           currentIncident: null
         });
@@ -70,27 +70,34 @@ export default function Login() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="card" style={{ width: '100%', maxWidth: '400px', textAlign: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem' }}>
-          <ShieldAlert color="var(--critical-color)" size={32} style={{ marginRight: '8px' }} />
-          <h1 style={{ color: 'var(--critical-color)', fontSize: '2rem', letterSpacing: '2px' }}>ResQ</h1>
-          <div className="pulse-dot" style={{ marginLeft: '8px', marginBottom: '16px' }}></div>
+    <div className="min-h-screen flex items-center justify-center bg-navy p-4">
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md bg-slate border border-slate-border rounded-lg p-8 text-center shadow-xl"
+      >
+        <div className="flex items-center justify-center mb-2">
+          <ShieldAlert className="text-accent-red mr-2" size={32} />
+          <h1 className="text-accent-red text-3xl tracking-widest font-bold">ResQ</h1>
+          <motion.div 
+            animate={{ scale: [1, 1.2, 1], opacity: [0.7, 1, 0.7] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+            className="w-3 h-3 bg-accent-red rounded-full ml-2 mb-4" 
+          />
         </div>
-        <p className="text-muted" style={{ marginBottom: '1.5rem' }}>Campus Crisis Command Center</p>
+        <p className="text-slate-400 mb-6">Campus Crisis Command Center</p>
         
         {errorMsg && (
-          <div style={{ backgroundColor: 'rgba(255, 59, 59, 0.1)', color: 'var(--critical-color)', padding: '0.5rem', borderRadius: '4px', marginBottom: '1rem', border: '1px solid var(--critical-color)', fontSize: '0.85rem' }}>
+          <div className="bg-red-900/20 text-accent-red p-3 rounded border border-accent-red/50 mb-4 text-sm">
             {errorMsg}
           </div>
         )}
 
-        <hr className="border-standard" style={{ margin: '1.5rem 0' }} />
+        <hr className="border-slate-border my-6" />
 
         {step === 'login' && (
           <button 
-            className="btn" 
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+            className="w-full flex items-center justify-center gap-3 bg-slate-light hover:bg-slate-border text-white border border-slate-border rounded py-3 transition font-semibold"
             onClick={handleGoogleSignIn}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -104,35 +111,35 @@ export default function Login() {
         )}
 
         {step === 'role_selection' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <h3 style={{ marginBottom: '1rem' }}>Select Your Role</h3>
+          <div className="flex flex-col gap-4">
+            <h3 className="mb-2 text-xl">Select Your Role</h3>
             
-            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', padding: '1rem', gap: '1rem' }} onClick={() => handleRoleSelect('reporter')}>
-              <User size={24} />
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 'bold' }}>Reporter</div>
-                <div className="text-muted" style={{ fontSize: '0.8rem' }}>Student or Staff</div>
+            <button className="flex items-center p-4 gap-4 bg-slate-light border border-slate-border rounded hover:border-accent-blue transition group" onClick={() => handleRoleSelect('reporter')}>
+              <User size={24} className="text-slate-400 group-hover:text-accent-blue" />
+              <div className="text-left">
+                <div className="font-bold text-white group-hover:text-accent-blue">Reporter</div>
+                <div className="text-slate-400 text-sm">Student or Staff</div>
               </div>
             </button>
 
-            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', padding: '1rem', gap: '1rem' }} onClick={() => handleRoleSelect('responder')}>
-              <Shield size={24} />
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 'bold' }}>Responder</div>
-                <div className="text-muted" style={{ fontSize: '0.8rem' }}>Security, Medical, Maintenance</div>
+            <button className="flex items-center p-4 gap-4 bg-slate-light border border-slate-border rounded hover:border-accent-amber transition group" onClick={() => handleRoleSelect('responder')}>
+              <Shield size={24} className="text-slate-400 group-hover:text-accent-amber" />
+              <div className="text-left">
+                <div className="font-bold text-white group-hover:text-accent-amber">Responder</div>
+                <div className="text-slate-400 text-sm">Security, Medical, Maintenance</div>
               </div>
             </button>
 
-            <button className="btn btn-outline" style={{ display: 'flex', alignItems: 'center', padding: '1rem', gap: '1rem' }} onClick={() => handleRoleSelect('admin')}>
-              <UserCog size={24} />
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontWeight: 'bold' }}>Admin</div>
-                <div className="text-muted" style={{ fontSize: '0.8rem' }}>Command Center Control</div>
+            <button className="flex items-center p-4 gap-4 bg-slate-light border border-slate-border rounded hover:border-accent-red transition group" onClick={() => handleRoleSelect('admin')}>
+              <UserCog size={24} className="text-slate-400 group-hover:text-accent-red" />
+              <div className="text-left">
+                <div className="font-bold text-white group-hover:text-accent-red">Admin</div>
+                <div className="text-slate-400 text-sm">Command Center Control</div>
               </div>
             </button>
           </div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }
