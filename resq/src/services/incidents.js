@@ -1,5 +1,6 @@
-import { collection, addDoc, updateDoc, doc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, getDocs, getDoc, query, where, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
+import { generateClosureReport } from './gemini';
 
 export async function createIncident(incidentData, geminiTriage) {
   try {
@@ -28,7 +29,9 @@ export async function createIncident(incidentData, geminiTriage) {
       assignedAt: assignedTo ? serverTimestamp() : null,
       enRouteAt: null,
       onSceneAt: null,
-      resolvedAt: null
+      resolvedAt: null,
+      closureReport: null,
+      responseTimeMinutes: null
     });
 
     if (assignedTo) {
@@ -57,7 +60,32 @@ export async function updateIncidentStatus(id, status) {
     } else if (status === 'resolved') {
       updates.resolvedAt = serverTimestamp();
     }
+    
     await updateDoc(doc(db, 'incidents', id), updates);
+
+    // Auto-generate AI closure report asynchronously if resolved
+    if (status === 'resolved') {
+      // Fetch fresh document to get timestamps and data
+      const docSnap = await getDoc(doc(db, 'incidents', id));
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        // Calculate response time
+        let responseMinutes = 0;
+        if (data.createdAt && data.resolvedAt) {
+          const created = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+          const resolved = data.resolvedAt.toDate ? data.resolvedAt.toDate() : new Date(data.resolvedAt);
+          responseMinutes = Math.round((resolved - created) / 60000);
+        }
+        
+        // Don't block UI thread, let this run in background
+        generateClosureReport(data, responseMinutes).then(async (report) => {
+          await updateDoc(doc(db, 'incidents', id), {
+            closureReport: report,
+            responseTimeMinutes: responseMinutes
+          });
+        }).catch(err => console.error("Error generating closure report in background:", err));
+      }
+    }
   } catch (error) {
     console.error("Error updating incident: ", error);
     throw error;

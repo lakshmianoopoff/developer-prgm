@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [closingNote, setClosingNote] = useState('');
   const [personnel, setPersonnel] = useState([]);
+  const [closureReportIncident, setClosureReportIncident] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -48,34 +49,71 @@ export default function Dashboard() {
     return resolvedDate >= today;
   });
 
+  const threatColors = {
+    medical: '#F59E0B',
+    fire: '#FF6B35',
+    security: '#FF3B3B',
+    maintenance: '#3B82F6',
+    other: '#5A6478'
+  };
+
   const typeCount = incidents.reduce((acc, i) => {
     acc[i.type] = (acc[i.type] || 0) + 1;
     return acc;
   }, {});
+
   const typeData = [
-    ["Type", "Count"],
-    ...(Object.keys(typeCount).length ? Object.keys(typeCount).map(k => [k, typeCount[k]]) : [["None", 0]])
+    ["Type", "Count", { role: "style" }],
+    ...(Object.keys(typeCount).length ? Object.keys(typeCount).map(k => [
+      k.charAt(0).toUpperCase() + k.slice(1), 
+      typeCount[k], 
+      threatColors[k] || '#5A6478'
+    ]) : [["None", 0, '#5A6478']])
   ];
 
-  const severityCount = incidents.reduce((acc, i) => {
-    acc[i.severity] = (acc[i.severity] || 0) + 1;
-    return acc;
-  }, {});
-  const severityData = [
-    ["Severity", "Count"],
-    ...(Object.keys(severityCount).length ? Object.keys(severityCount).map(k => [k, severityCount[k]]) : [["None", 0]])
-  ];
+  let peakType = "NONE";
+  let peakCount = 0;
+  Object.keys(typeCount).forEach(k => {
+    if (typeCount[k] > peakCount) {
+      peakCount = typeCount[k];
+      peakType = k.toUpperCase();
+    }
+  });
+  
+  const totalIncidentsToday = incidents.filter(i => {
+    if (!i.createdAt) return false;
+    const d = i.createdAt.toDate ? i.createdAt.toDate() : new Date(i.createdAt);
+    return d.toDateString() === new Date().toDateString();
+  }).length;
+
+  const threatChartOptions = {
+    backgroundColor: 'transparent',
+    chartArea: { width: '100%', height: '80%', left: 20, right: 10, top: 20, bottom: 30 },
+    legend: { position: 'none' },
+    bar: { groupWidth: '60%' },
+    hAxis: { 
+      textStyle: { color: '#5A6478', fontSize: 10, fontName: 'JetBrains Mono' }
+    },
+    vAxis: { 
+      textStyle: { color: '#5A6478', fontSize: 10, fontName: 'JetBrains Mono' },
+      gridlines: { color: '#1E2230', count: 4 },
+      baselineColor: '#1E2230',
+      format: '0',
+      minValue: 0
+    },
+    tooltip: { textStyle: { color: '#111318', fontName: 'Instrument Sans' } }
+  };
 
   // 24 Hour Chart Calculation
   const getLast24HoursData = () => {
-    const dataMap = {};
+    const hoursArr = [];
     const now = new Date();
     
-    // Initialize last 24 hours with 0
+    // Initialize last 24 hours ordered chronologically
     for (let i = 23; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 60 * 60 * 1000);
       const hourStr = d.toLocaleTimeString([], { hour: '2-digit', hour12: false }) + ':00';
-      dataMap[hourStr] = { critical: 0, moderate: 0, minor: 0 };
+      hoursArr.push({ label: hourStr, critical: 0, moderate: 0, minor: 0, timestamp: d.getTime() });
     }
 
     const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -87,27 +125,28 @@ export default function Dashboard() {
       if (!inc.createdAt) return;
       const date = inc.createdAt.toDate ? inc.createdAt.toDate() : new Date(inc.createdAt);
       if (date >= cutoff && date <= now) {
-        const hourStr = date.toLocaleTimeString([], { hour: '2-digit', hour12: false }) + ':00';
-        if (dataMap[hourStr]) {
+        const bucketIndex = hoursArr.findIndex(b => date.getTime() >= b.timestamp && date.getTime() < b.timestamp + 3600000);
+        
+        if (bucketIndex !== -1) {
           if (inc.severity === 'critical') {
-             dataMap[hourStr].critical++;
+             hoursArr[bucketIndex].critical++;
              totalCritical++;
           } else if (inc.severity === 'moderate') {
-             dataMap[hourStr].moderate++;
+             hoursArr[bucketIndex].moderate++;
              totalModerate++;
           } else {
-             dataMap[hourStr].minor++;
+             hoursArr[bucketIndex].minor++;
              totalMinor++;
           }
         }
       }
     });
 
-    const rows = Object.keys(dataMap).map(hour => [
-      hour, 
-      dataMap[hour].critical, 
-      dataMap[hour].moderate, 
-      dataMap[hour].minor
+    const rows = hoursArr.map((b, index) => [
+      (index % 4 === 0) ? b.label : '', 
+      b.critical, 
+      b.moderate, 
+      b.minor
     ]);
     
     return {
@@ -119,29 +158,26 @@ export default function Dashboard() {
   const { chartData: lineChartData, totals: last24Totals } = getLast24HoursData();
 
   const lineChartOptions = {
-    backgroundColor: '#111318',
-    chartArea: { backgroundColor: '#111318', left: 40, right: 20, top: 20, bottom: 40, width: '100%', height: '80%' },
+    backgroundColor: 'transparent',
+    chartArea: { width: '100%', height: '80%', left: 20, right: 10, top: 20, bottom: 30 },
     colors: ['#FF3B3B', '#F59E0B', '#22D3A0'],
-    legend: { 
-      position: 'bottom', 
-      textStyle: { color: '#5A6478', fontSize: 11, fontName: 'JetBrains Mono' }
-    },
+    legend: { position: 'none' },
     hAxis: { 
       textStyle: { color: '#5A6478', fontSize: 10, fontName: 'JetBrains Mono' },
-      gridlines: { color: '#1E2230' },
+      gridlines: { color: 'transparent' },
       baselineColor: '#1E2230'
     },
     vAxis: { 
       textStyle: { color: '#5A6478', fontSize: 10, fontName: 'JetBrains Mono' },
-      gridlines: { color: '#1E2230' },
+      gridlines: { color: '#1E2230', count: 4 },
       baselineColor: '#1E2230',
       minValue: 0,
       format: '0'
     },
     lineWidth: 2,
-    pointSize: 4,
+    pointSize: 3,
     pointShape: 'circle',
-    curveType: 'function',
+    curveType: 'none',
     tooltip: { 
       textStyle: { color: '#111318', fontName: 'Instrument Sans' },
       showColorCode: true 
@@ -316,9 +352,20 @@ export default function Dashboard() {
                             </div>
                             <div className="flex flex-row md:flex-col items-center md:items-end gap-2 md:gap-1 ml-7 md:ml-0">
                                <span className="mono-text text-[10px] uppercase font-bold text-slate-400 tracking-wider">ID: RQ-{inc.id.substring(0,4)}</span>
-                               <span className={`px-2 py-0.5 rounded-sm border text-[10px] uppercase font-bold tracking-wider mono-text ${inc.status === 'resolved' ? 'bg-accent-green/10 text-accent-green border-accent-green/30' : inc.status === 'in_progress' ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/30' : 'bg-accent-amber/10 text-accent-amber border-accent-amber/30'}`}>
-                                 {inc.status}
-                               </span>
+                               <div className="flex items-center gap-2">
+                                 {inc.status === 'resolved' && inc.closureReport && (
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); setClosureReportIncident(inc); }} 
+                                     className="border border-[#22D3A0] text-[#22D3A0] hover:bg-[#22D3A0]/10 px-2 py-0.5 rounded text-[11px] transition-colors" 
+                                     style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                                   >
+                                     View Report
+                                   </button>
+                                 )}
+                                 <span className={`px-2 py-0.5 rounded-sm border text-[10px] uppercase font-bold tracking-wider mono-text ${inc.status === 'resolved' ? 'bg-accent-green/10 text-accent-green border-accent-green/30' : inc.status === 'in_progress' ? 'bg-accent-blue/10 text-accent-blue border-accent-blue/30' : 'bg-accent-amber/10 text-accent-amber border-accent-amber/30'}`}>
+                                   {inc.status}
+                                 </span>
+                               </div>
                             </div>
                           </div>
                         </motion.div>
@@ -328,37 +375,109 @@ export default function Dashboard() {
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 min-h-[250px] shrink-0">
-                <div className="bg-slate border-[4px] border-slate-border rounded-sm shadow-lg p-5">
-                  <h4 className="text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-4">Threat Vectors</h4>
-                  <div className="h-[180px]">
-                    <Chart chartType="BarChart" width="100%" height="100%" data={typeData} options={{...chartOptions, legend: {position: 'none'}}} />
-                  </div>
-                </div>
-                <div className="bg-slate border-[4px] border-slate-border rounded-sm shadow-lg p-5 flex flex-col">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-[#5A6478] text-[10px] tracking-[0.1em] font-bold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>INCIDENTS — LAST 24H</h4>
-                  </div>
-                  <div className="flex gap-2 mb-2">
-                    <span className="text-[10px] font-bold px-2 py-1 rounded border border-[#FF3B3B] text-[#FF3B3B] bg-[#FF3B3B]/10">🔴 Critical: {last24Totals.critical}</span>
-                    <span className="text-[10px] font-bold px-2 py-1 rounded border border-[#F59E0B] text-[#F59E0B] bg-[#F59E0B]/10">🟡 Moderate: {last24Totals.moderate}</span>
-                    <span className="text-[10px] font-bold px-2 py-1 rounded border border-[#22D3A0] text-[#22D3A0] bg-[#22D3A0]/10">🟢 Minor: {last24Totals.minor}</span>
-                  </div>
-                  <div className="flex-1 h-[180px] w-full mt-2">
-                    <Chart chartType="LineChart" width="100%" height="100%" data={lineChartData} options={lineChartOptions} />
-                  </div>
-                </div>
-                <div className="bg-slate border-[4px] border-slate-border rounded-sm shadow-lg p-5 flex flex-col">
-                  <h4 className="text-slate-400 text-[10px] uppercase tracking-widest font-bold mb-4">Active Personnel Roster</h4>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-2">
-                    {personnel.map((p, i) => (
-                      <div key={i} className="flex justify-between items-center bg-navy p-2 rounded border border-slate-border">
-                        <span className="text-sm font-bold text-white truncate max-w-[150px]">{p.name || p.email}</span>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded ${p.role === 'admin' ? 'bg-accent-red/20 text-accent-red' : p.role === 'responder' ? 'bg-accent-blue/20 text-accent-blue' : 'bg-slate-border text-slate-300'}`}>
-                          {p.role}
-                        </span>
+              <div className="flex flex-col gap-3 min-h-[250px] shrink-0 pb-6">
+                
+                {/* ROW 1: Charts */}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                  {/* Threat Vectors */}
+                  <div className="bg-[#111318] border border-[#1E2230] rounded-lg p-4 flex flex-col min-h-[200px]">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-[#5A6478] text-[10px] tracking-[0.12em] uppercase" style={{ fontFamily: '"JetBrains Mono", monospace' }}>THREAT VECTORS</h4>
+                      <div className="flex gap-4">
+                        <span className="text-[#5A6478] text-[11px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>TOTAL TODAY &nbsp;<span className="text-white font-bold">{totalIncidentsToday}</span></span>
+                        <span className="text-[#5A6478] text-[11px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>PEAK TYPE &nbsp;<span className="text-white font-bold">{peakType}</span></span>
                       </div>
-                    ))}
+                    </div>
+                    <div className="flex-1 w-full min-h-[160px]">
+                      <Chart chartType="BarChart" width="100%" height="100%" data={typeData} options={threatChartOptions} />
+                    </div>
+                  </div>
+
+                  {/* Incidents Last 24H */}
+                  <div className="bg-[#111318] border border-[#1E2230] rounded-lg p-4 flex flex-col min-h-[200px]">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-[#5A6478] text-[10px] tracking-[0.12em] uppercase" style={{ fontFamily: '"JetBrains Mono", monospace' }}>INCIDENTS LAST 24H</h4>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-[#FF3B3B]"></div>
+                          <span className="text-[#5A6478] text-[11px]" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>Critical</span>
+                          <span className="text-[#FF3B3B] text-[13px] font-bold ml-1" style={{ fontFamily: '"JetBrains Mono", monospace' }}>{last24Totals.critical}</span>
+                        </div>
+                        <div className="w-[1px] h-[12px] bg-[#1E2230] mx-1"></div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-[#F59E0B]"></div>
+                          <span className="text-[#5A6478] text-[11px]" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>Moderate</span>
+                          <span className="text-[#F59E0B] text-[13px] font-bold ml-1" style={{ fontFamily: '"JetBrains Mono", monospace' }}>{last24Totals.moderate}</span>
+                        </div>
+                        <div className="w-[1px] h-[12px] bg-[#1E2230] mx-1"></div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-2 h-2 rounded-full bg-[#22D3A0]"></div>
+                          <span className="text-[#5A6478] text-[11px]" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>Minor</span>
+                          <span className="text-[#22D3A0] text-[13px] font-bold ml-1" style={{ fontFamily: '"JetBrains Mono", monospace' }}>{last24Totals.minor}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex-1 w-full min-h-[160px]">
+                      <Chart chartType="LineChart" width="100%" height="100%" data={lineChartData} options={lineChartOptions} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ROW 2: Active Personnel Roster */}
+                <div className="bg-[#111318] border border-[#1E2230] rounded-lg p-4 flex flex-col">
+                  <h4 className="text-[#5A6478] text-[10px] tracking-[0.12em] uppercase mb-3" style={{ fontFamily: '"JetBrains Mono", monospace' }}>ACTIVE PERSONNEL ROSTER</h4>
+                  
+                  <div className="w-full overflow-x-auto">
+                    <div className="min-w-[600px] max-h-[240px] overflow-y-auto custom-scrollbar pr-2">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr>
+                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>NAME</th>
+                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>ROLE</th>
+                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>STATUS</th>
+                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>CURRENT INCIDENT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {personnel.map((p, i) => {
+                            const initials = p.name ? p.name.split(' ').map(n => n[0]).join('').substring(0,2) : p.email?.substring(0,2).toUpperCase();
+                            
+                            let roleStyles = { bg: 'rgba(90,100,120,0.15)', text: '#5A6478', border: '#5A6478' };
+                            if (p.role === 'admin') roleStyles = { bg: 'rgba(255,59,59,0.15)', text: '#FF3B3B', border: '#FF3B3B' };
+                            else if (p.role === 'responder') roleStyles = { bg: 'rgba(59,130,246,0.15)', text: '#3B82F6', border: '#3B82F6' };
+                            
+                            return (
+                              <tr key={i} className="group hover:bg-white/5 transition-colors border-b border-white/5 h-[40px] last:border-0">
+                                <td className="py-2 flex items-center gap-3">
+                                  <div className="w-[28px] h-[28px] rounded-full flex items-center justify-center font-bold text-[11px]" style={{ backgroundColor: roleStyles.bg, color: roleStyles.text }}>
+                                    {initials}
+                                  </div>
+                                  <span className="text-[#E8EDF5] text-[13px] whitespace-nowrap" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>{p.name || p.email}</span>
+                                </td>
+                                <td className="py-2">
+                                  <span className="px-2 py-0.5 rounded-[4px] border text-[10px] uppercase tracking-[0.08em] bg-transparent whitespace-nowrap" style={{ borderColor: roleStyles.border, color: roleStyles.text, fontFamily: '"JetBrains Mono", monospace' }}>
+                                    {p.role || 'Reporter'}
+                                  </span>
+                                </td>
+                                <td className="py-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-[6px] h-[6px] rounded-full" style={{ backgroundColor: p.available !== false ? '#22D3A0' : '#5A6478' }}></div>
+                                    <span className="text-[#E8EDF5] text-[12px] whitespace-nowrap" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>{p.available !== false ? 'Active' : 'Offline'}</span>
+                                  </div>
+                                </td>
+                                <td className="py-2">
+                                  {p.currentIncident ? (
+                                    <span className="text-[#F59E0B] text-[12px] whitespace-nowrap" style={{ fontFamily: '"JetBrains Mono", monospace' }}>#{p.currentIncident.substring(0,6).toUpperCase()}</span>
+                                  ) : (
+                                    <span className="text-[#5A6478]">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -373,6 +492,58 @@ export default function Dashboard() {
             incident={incidents.find(i => i.id === selectedIncidentId)} 
             onClose={() => setSelectedIncidentId(null)} 
           />
+        )}
+      </AnimatePresence>
+
+      {/* Closure Report Modal */}
+      <AnimatePresence>
+        {closureReportIncident && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => setClosureReportIncident(null)}
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              onClick={e => e.stopPropagation()}
+              className="bg-[#111318] border border-[#1E2230] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+            >
+              <div className="p-4 border-b border-[#1E2230] flex justify-between items-center bg-[#0A0C10]">
+                <div className="flex items-center gap-3">
+                  <h3 className="text-[#FF3B3B] text-[13px] tracking-widest uppercase font-bold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>INCIDENT CLOSURE REPORT</h3>
+                  <span className="text-white/40 text-[10px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>RQ-{closureReportIncident.id.substring(0,6)}</span>
+                </div>
+                <button onClick={() => setClosureReportIncident(null)} className="text-[#5A6478] hover:text-white transition-colors">
+                  <Plus className="rotate-45 w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-5 flex flex-col gap-4">
+                <div>
+                  <h4 className="text-white text-lg font-bold" style={{ fontFamily: '"Syne", sans-serif' }}>{closureReportIncident.title}</h4>
+                </div>
+                <div className="bg-[#0A0C10] border border-[#1E2230] p-4 rounded-lg relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-[#22D3A0]/0 via-[#22D3A0] to-[#22D3A0]/0"></div>
+                  <p className="text-[#22D3A0] text-[13px] whitespace-pre-wrap" style={{ fontFamily: '"JetBrains Mono", monospace', lineHeight: '1.8' }}>
+                    {closureReportIncident.closureReport}
+                  </p>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-[#3B82F6] text-[10px] tracking-wider uppercase font-bold bg-[#3B82F6]/10 px-2 py-1 rounded" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                    POWERED BY GEMINI AI
+                  </span>
+                  {closureReportIncident.responseTimeMinutes !== undefined && closureReportIncident.responseTimeMinutes !== null && (
+                    <span className="text-[#F59E0B] text-[11px] font-bold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                      ⚡ Resolved in {closureReportIncident.responseTimeMinutes} minutes
+                    </span>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

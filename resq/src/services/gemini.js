@@ -104,23 +104,30 @@ Spoken input: ${transcript}`;
   }
 }
 
-export async function generateClosureReport(incident) {
+export async function generateClosureReport(incident, responseMinutes = 0) {
   if (apiKey === "demo-api-key" || !apiKey || !apiKey.startsWith('gsk_')) {
     await new Promise(resolve => setTimeout(resolve, 1500));
-    return `INCIDENT CLOSURE SUMMARY\n\nIncident ${incident.title} was successfully resolved. The situation was handled by ${incident.assignedName || 'units'} and cleared from the active roster. All campus operations returned to normal.`;
+    return `At ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, a ${incident.type} incident was reported at ${incident.location}. The situation was successfully stabilized. ${incident.assignedName || 'Campus response team'} responded and resolved the incident in ${responseMinutes} minutes.`;
   }
 
-  try {
-    const prompt = `You are a tactical incident commander AI. Generate a professional "AI CLOSURE REPORT" for the following resolved emergency incident. Keep it highly concise, authoritative, and tactical. Maximum 4 sentences. 
+  const createdTime = incident.createdAt ? (incident.createdAt.toDate ? incident.createdAt.toDate() : new Date(incident.createdAt)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Unknown';
+  const resolvedTime = incident.resolvedAt ? (incident.resolvedAt.toDate ? incident.resolvedAt.toDate() : new Date(incident.resolvedAt)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-Incident Details:
+  try {
+    const prompt = `Generate a professional 3-sentence incident closure report for official campus records. Be factual, specific, and concise.
+Use this exact format:
+'At [time], a [type] incident was reported at [location]. [One sentence about what happened based on description]. [assignedName or 'Campus response team'] responded and resolved the incident in [responseMinutes] minutes.'
+
+Incident data:
 Title: ${incident.title}
-Severity: ${incident.severity}
 Type: ${incident.type}
+Severity: ${incident.severity}
 Location: ${incident.location}
 Description: ${incident.description}
-Responder: ${incident.assignedName || 'Unassigned'}
-Total Duration: ${incident.createdAt && incident.resolvedAt ? Math.round((incident.resolvedAt.toDate() - incident.createdAt.toDate())/60000) + ' minutes' : 'Unknown'}`;
+Reported at: ${createdTime}
+Resolved at: ${resolvedTime}
+Assigned Responder: ${incident.assignedName || 'Unassigned'}
+Response time: ${responseMinutes} minutes`;
 
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',

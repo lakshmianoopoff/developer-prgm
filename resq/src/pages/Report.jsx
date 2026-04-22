@@ -33,6 +33,7 @@ export default function Report() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [triageResult, setTriageResult] = useState(null);
+  const [expandedReportId, setExpandedReportId] = useState(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessingVoice, setIsProcessingVoice] = useState(false);
@@ -353,24 +354,53 @@ export default function Report() {
                 {myPastIncidents.map(inc => (
                   <motion.div 
                     key={inc.id}
-                    className="bg-slate border border-slate-border rounded-xl p-4 hover:border-accent-blue transition cursor-pointer shadow-lg"
-                    onClick={() => {
+                    className="bg-slate border border-slate-border rounded-xl p-4 hover:border-accent-blue transition shadow-lg overflow-hidden flex flex-col"
+                  >
+                    <div className="cursor-pointer" onClick={() => {
                       setTitle(inc.title);
                       setType(inc.type);
                       setLocationStr(inc.location);
                       setDescription(inc.description);
                       setTriageResult({ ...inc.geminiTriage, incidentId: inc.id });
-                    }}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 className="font-bold text-white text-base">{inc.title}</h4>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${inc.status === 'resolved' ? 'bg-accent-green/20 text-accent-green' : inc.status === 'assigned' || inc.status === 'in_progress' ? 'bg-accent-blue/20 text-accent-blue' : 'bg-accent-amber/20 text-accent-amber'}`}>
-                        {inc.status}
-                      </span>
+                    }}>
+                      <div className="flex justify-between items-start mb-2">
+                        <h4 className="font-bold text-white text-base">{inc.title}</h4>
+                        <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded ${inc.status === 'resolved' ? 'bg-accent-green/20 text-accent-green' : inc.status === 'assigned' || inc.status === 'in_progress' ? 'bg-accent-blue/20 text-accent-blue' : 'bg-accent-amber/20 text-accent-amber'}`}>
+                          {inc.status}
+                        </span>
+                      </div>
+                      <div className="text-slate-400 text-xs flex items-center gap-1 mt-2">
+                         <MapPin size={12} className="text-slate-500" /> {inc.location}
+                      </div>
                     </div>
-                    <div className="text-slate-400 text-xs flex items-center gap-1 mt-2">
-                       <MapPin size={12} className="text-slate-500" /> {inc.location}
-                    </div>
+                    
+                    {inc.status === 'resolved' && inc.closureReport && (
+                      <div className="mt-3 pt-3 border-t border-slate-border">
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedReportId(expandedReportId === inc.id ? null : inc.id);
+                          }}
+                          className="text-[#22D3A0] text-[12px] hover:underline flex items-center gap-1"
+                          style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                        >
+                          See closure report {expandedReportId === inc.id ? '▴' : '▾'}
+                        </button>
+                        
+                        {expandedReportId === inc.id && (
+                          <motion.div 
+                            initial={{ height: 0, opacity: 0 }} 
+                            animate={{ height: 'auto', opacity: 1 }} 
+                            className="mt-3 bg-[#0A0C10] border border-[#1E2230] p-3 rounded-lg relative overflow-hidden"
+                          >
+                            <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-[#22D3A0]/0 via-[#22D3A0] to-[#22D3A0]/0"></div>
+                            <p className="text-[#22D3A0] text-[11px] whitespace-pre-wrap" style={{ fontFamily: '"JetBrains Mono", monospace', lineHeight: '1.6' }}>
+                              {inc.closureReport}
+                            </p>
+                          </motion.div>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 ))}
               </div>
