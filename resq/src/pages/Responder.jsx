@@ -16,6 +16,7 @@ export default function Responder() {
   const [available, setAvailable] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [myLocation, setMyLocation] = useState(null);
+  const [sector, setSector] = useState(localStorage.getItem('responderSector') || 'all');
 
   useEffect(() => {
     if (user) {
@@ -32,6 +33,11 @@ export default function Responder() {
       });
     }
   }, [user]);
+
+  const handleSectorChange = (newSector) => {
+    setSector(newSector);
+    localStorage.setItem('responderSector', newSector);
+  };
 
   const toggleAvailability = async () => {
     const newVal = !available;
@@ -50,6 +56,13 @@ export default function Responder() {
     }
   };
 
+  const handleAssignSelf = async (incidentId) => {
+    await updateDoc(doc(db, 'incidents', incidentId), {
+      assignedTo: user.uid,
+      status: 'assigned'
+    });
+  };
+
   const calculateDistance = (coord1, coord2) => {
     if (!coord1 || !coord2) return null;
     const R = 6371; // km
@@ -64,7 +77,13 @@ export default function Responder() {
 
   if (loading) return <div className="min-h-screen bg-navy flex items-center justify-center text-slate-400"><Loader2 className="animate-spin" size={32} /></div>;
 
-  const assignedIncidents = incidents.filter(i => i.assignedTo === user.uid && i.status !== 'resolved');
+  const assignedIncidents = incidents.filter(i => {
+    if (i.status === 'resolved') return false;
+    if (i.assignedTo === user.uid) return true;
+    if (sector !== 'all' && i.type === sector) return true;
+    return false;
+  });
+
   const activeIncidents = incidents
     .filter(i => i.status !== 'resolved')
     .sort((a,b) => {
@@ -82,15 +101,28 @@ export default function Responder() {
   return (
     <div className="bg-navy min-h-screen pb-12">
       <Navbar title="Responder Panel">
-        <div className="flex items-center gap-2 mr-4 bg-slate-light px-3 py-1.5 rounded-full border border-slate-border">
-          <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Status</span>
-          <button 
-            onClick={toggleAvailability}
-            className={`px-3 py-1 rounded-full text-xs font-bold transition flex items-center gap-2 ${available ? 'bg-accent-green text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-transparent text-slate-400 border border-slate-border hover:bg-slate-border'}`}
+        <div className="flex items-center gap-4 mr-4">
+          <select 
+            value={sector}
+            onChange={(e) => handleSectorChange(e.target.value)}
+            className="bg-slate-light border border-slate-border text-white px-3 py-1.5 rounded-full text-xs font-bold outline-none"
           >
-            {available && <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></span>}
-            {available ? 'Available' : 'Busy'}
-          </button>
+            <option value="all" className="bg-navy text-white">All Sectors</option>
+            <option value="security" className="bg-navy text-white">Security Sector</option>
+            <option value="fire" className="bg-navy text-white">Fire & Rescue Sector</option>
+            <option value="medical" className="bg-navy text-white">Medical Sector</option>
+            <option value="maintenance" className="bg-navy text-white">Maintenance Sector</option>
+          </select>
+          <div className="flex items-center gap-2 bg-slate-light px-3 py-1.5 rounded-full border border-slate-border">
+            <span className="text-slate-400 text-xs uppercase tracking-wider font-bold">Status</span>
+            <button 
+              onClick={toggleAvailability}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition flex items-center gap-2 ${available ? 'bg-accent-green text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'bg-transparent text-slate-400 border border-slate-border hover:bg-slate-border'}`}
+            >
+              {available && <span className="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></span>}
+              {available ? 'Available' : 'Busy'}
+            </button>
+          </div>
         </div>
       </Navbar>
       
@@ -104,18 +136,20 @@ export default function Responder() {
               <span className="w-2 h-2 rounded-full bg-accent-blue animate-pulse"></span>
               <h3 className="m-0 text-white font-bold text-sm uppercase tracking-wider">Live Campus Map</h3>
             </div>
-            <MapEmbed markers={mapMarkers} userLocation={myLocation} style={{ height: '350px', width: '100%' }} />
+            <div style={{ height: '350px', width: '100%' }}>
+               <MapEmbed markers={mapMarkers} userLocation={myLocation} />
+            </div>
           </motion.div>
 
           <div>
             <h2 className="text-2xl font-bold mb-6 flex items-center gap-3">
-              My Assigned Tasks 
+              Sector Tasks
               {assignedIncidents.length > 0 && <span className="bg-accent-red text-white text-xs px-2 py-0.5 rounded-full">{assignedIncidents.length}</span>}
             </h2>
             
             {assignedIncidents.length === 0 ? (
               <div className="bg-slate border border-slate-border border-dashed rounded-xl p-12 text-center text-slate-500">
-                No active incidents assigned to you. Stand by.
+                No active incidents in your sector. Stand by.
               </div>
             ) : (
               <AnimatePresence>
@@ -153,10 +187,10 @@ export default function Responder() {
 
                       <div className="mt-6 flex gap-3">
                         <button 
-                          className={`flex-1 py-3 rounded font-bold transition ${inc.status === 'assigned' ? 'bg-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-transparent border border-slate-border text-slate-400 hover:bg-slate-light'}`}
+                          className={`flex-1 py-3 rounded font-bold transition ${inc.status === 'assigned' || inc.status === 'in_progress' ? 'bg-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-transparent border border-slate-border text-slate-400 hover:bg-slate-light'}`}
                           onClick={() => handleStatusUpdate(inc.id, 'in_progress')}
                         >
-                          {inc.status === 'assigned' ? 'Respond (En Route)' : 'En Route'}
+                          {inc.status === 'assigned' || inc.status === 'in_progress' ? 'Respond (En Route)' : 'En Route'}
                         </button>
                         <button 
                           className={`flex-1 py-3 rounded font-bold transition border border-accent-green text-accent-green hover:bg-accent-green/10`}
@@ -229,13 +263,17 @@ export default function Responder() {
                     <motion.div 
                       key={inc.id} 
                       initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      className="flex items-start p-4 hover:bg-slate-light transition"
+                      className="flex items-start p-4 hover:bg-slate-light transition cursor-pointer"
+                      onClick={() => handleAssignSelf(inc.id)}
                     >
                       <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${dotColor} ${isCritical ? 'animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]' : ''}`}></div>
                       <div className="ml-4">
                         <div className="font-bold text-white text-sm mb-1">{inc.title}</div>
                         <div className="text-slate-400 text-xs flex items-center gap-1">
                           <MapPin size={12} /> {inc.location}
+                        </div>
+                        <div className="text-slate-500 text-[10px] mt-2 uppercase tracking-widest">
+                           Click to take assignment
                         </div>
                       </div>
                     </motion.div>

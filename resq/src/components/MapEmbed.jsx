@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
 const createAuraIcon = (color, isPulse, locationName) => {
@@ -56,7 +56,16 @@ function MapResizer() {
   return null;
 }
 
-export default function MapEmbed({ center, markers = [], userLocation = null, zoom = 15, isReportMode = false, onMarkerClick }) {
+function MapClickHandler({ onMapClick }) {
+  useMapEvents({
+    click(e) {
+      if (onMapClick) onMapClick([e.latlng.lat, e.latlng.lng]);
+    }
+  });
+  return null;
+}
+
+export default function MapEmbed({ center, markers = [], userLocation = null, zoom = 15, isReportMode = false, onMarkerClick, onMapClick }) {
   const defaultCenter = center || userLocation || (markers.length > 0 ? markers[0].position : [10.3546, 76.2133]);
   
   return (
@@ -91,6 +100,7 @@ export default function MapEmbed({ center, markers = [], userLocation = null, zo
       <MapContainer center={[0, 0]} zoom={2} style={{ height: '100%', width: '100%', background: '#0A0A0A' }} scrollWheelZoom={true}>
         <ChangeView center={defaultCenter} zoom={zoom} isReportMode={isReportMode} />
         <MapResizer />
+        <MapClickHandler onMapClick={onMapClick} />
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; CARTO'

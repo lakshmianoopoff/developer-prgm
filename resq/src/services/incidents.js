@@ -12,13 +12,9 @@ export async function createIncident(incidentData, geminiTriage) {
     const querySnapshot = await getDocs(q);
     
     if (!querySnapshot.empty) {
-      // Assign to the first available matching responder
       const responder = querySnapshot.docs[0];
       assignedTo = responder.id;
       assignedName = responder.data().name;
-      
-      // Update responder status to unavailable and set currentIncident
-      // We will do this after we have the incident ID
     }
 
     const docRef = await addDoc(collection(db, 'incidents'), {
@@ -29,6 +25,9 @@ export async function createIncident(incidentData, geminiTriage) {
       assignedName,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      assignedAt: assignedTo ? serverTimestamp() : null,
+      enRouteAt: null,
+      onSceneAt: null,
       resolvedAt: null
     });
 
@@ -49,7 +48,13 @@ export async function createIncident(incidentData, geminiTriage) {
 export async function updateIncidentStatus(id, status) {
   try {
     const updates = { status, updatedAt: serverTimestamp() };
-    if (status === 'resolved') {
+    if (status === 'assigned') {
+      updates.assignedAt = serverTimestamp();
+    } else if (status === 'in_progress') {
+      updates.enRouteAt = serverTimestamp();
+    } else if (status === 'on_scene') {
+      updates.onSceneAt = serverTimestamp();
+    } else if (status === 'resolved') {
       updates.resolvedAt = serverTimestamp();
     }
     await updateDoc(doc(db, 'incidents', id), updates);
