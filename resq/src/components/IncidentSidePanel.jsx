@@ -5,6 +5,7 @@ import { updateIncidentStatus } from '../services/incidents';
 import { generateClosureReport } from '../services/gemini';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import AlertDraftPanel from './AlertDraftPanel';
 
 const formatTime = (timestamp) => {
   if (!timestamp) return "Pending";
@@ -195,6 +196,13 @@ export default function IncidentSidePanel({ incident, onClose }) {
                   ))}
                 </ol>
               </div>
+            </div>
+          )}
+
+          {/* Alert Draft Panel */}
+          {incident.status !== 'resolved' && (
+            <div className="mt-8 print:break-inside-avoid">
+              <AlertDraftPanel incident={incident} />
             </div>
           )}
         </div>

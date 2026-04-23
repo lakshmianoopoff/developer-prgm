@@ -9,6 +9,7 @@ import { useIncidents } from '../hooks/useIncidents';
 import { db } from '../services/firebase';
 import { updateIncidentStatus } from '../services/incidents';
 import { motion, AnimatePresence } from 'framer-motion';
+import ResponderIncidentCard from '../components/ResponderIncidentCard';
 
 export default function Responder() {
   const { user } = useAuth();
@@ -17,6 +18,7 @@ export default function Responder() {
   const [expandedId, setExpandedId] = useState(null);
   const [myLocation, setMyLocation] = useState(null);
   const [sector, setSector] = useState(localStorage.getItem('responderSector') || 'all');
+  const [globalLang, setGlobalLang] = useState(localStorage.getItem('resq_responder_lang') || 'EN');
 
   useEffect(() => {
     if (user) {
@@ -159,84 +161,16 @@ export default function Responder() {
                   const borderColor = isCritical ? 'border-accent-red' : inc.severity === 'moderate' ? 'border-accent-amber' : 'border-accent-green';
                   
                   return (
-                    <motion.div 
+                    <ResponderIncidentCard
                       key={inc.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      className={`bg-slate border-l-4 ${borderColor} border-y border-r border-slate-border rounded-r-xl p-6 mb-4 shadow-lg`}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-xl font-bold mb-2 text-white">{inc.title}</h3>
-                          <div className="flex items-center gap-4 my-3 text-slate-400 text-sm">
-                            <span className="flex items-center gap-1">
-                              <MapPin size={16} className="text-accent-blue" /> {inc.location}
-                            </span>
-                            {dist && (
-                              <span className="mono-text text-accent-amber bg-accent-amber/10 px-2 py-1 rounded flex items-center gap-1">
-                                <Navigation size={14} /> {dist} km away
-                              </span>
-                            )}
-                          </div>
-                          <span className="bg-navy border border-slate-border px-3 py-1 rounded text-xs capitalize text-slate-300">
-                            {inc.type}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-6 flex gap-3">
-                        <button 
-                          className={`flex-1 py-3 rounded font-bold transition ${inc.status === 'assigned' || inc.status === 'in_progress' ? 'bg-accent-blue text-white shadow-[0_0_15px_rgba(59,130,246,0.3)]' : 'bg-transparent border border-slate-border text-slate-400 hover:bg-slate-light'}`}
-                          onClick={() => handleStatusUpdate(inc.id, 'in_progress')}
-                        >
-                          {inc.status === 'assigned' || inc.status === 'in_progress' ? 'Respond (En Route)' : 'En Route'}
-                        </button>
-                        <button 
-                          className={`flex-1 py-3 rounded font-bold transition border border-accent-green text-accent-green hover:bg-accent-green/10`}
-                          onClick={() => handleStatusUpdate(inc.id, 'resolved')}
-                        >
-                          Mark Resolved ✓
-                        </button>
-                      </div>
-
-                      <div className="mt-6 pt-4 border-t border-slate-border">
-                        <button 
-                          className="flex items-center gap-2 text-accent-blue hover:text-blue-400 transition text-sm font-semibold"
-                          onClick={() => setExpandedId(expandedId === inc.id ? null : inc.id)}
-                        >
-                          {expandedId === inc.id ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
-                          Coordination Hub
-                        </button>
-                        
-                        <AnimatePresence>
-                          {expandedId === inc.id && (
-                            <motion.div 
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="mt-4 overflow-hidden flex flex-col gap-6"
-                            >
-                              <div className="mono-text p-4 bg-navy rounded-lg border border-slate-border">
-                                <div className="text-slate-500 text-xs uppercase tracking-widest mb-3">AI Instructions</div>
-                                <ol className="pl-4 list-decimal marker:text-slate-500 space-y-2 text-sm text-slate-300">
-                                  {inc.geminiTriage?.instructions?.map((inst, i) => <li key={i}>{inst}</li>)}
-                                </ol>
-                              </div>
-                              
-                              <div className="flex flex-col md:flex-row gap-6">
-                                <div className="flex-1">
-                                  <ChatBox incidentId={inc.id} isPublic={true} />
-                                </div>
-                                <div className="flex-1">
-                                  <ChatBox incidentId={inc.id} isPublic={false} />
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </motion.div>
+                      incident={inc}
+                      isAssigned={true}
+                      dist={dist}
+                      onStatusUpdate={handleStatusUpdate}
+                      onAssignSelf={handleAssignSelf}
+                      globalLang={globalLang}
+                      setGlobalLang={setGlobalLang}
+                    />
                   )
                 })}
               </AnimatePresence>
@@ -255,28 +189,20 @@ export default function Responder() {
             {activeIncidents.length === 0 ? (
                <div className="p-8 text-center text-slate-500">No active incidents. Campus is safe ✓</div>
             ) : (
-              <div className="divide-y divide-slate-border">
+              <div className="space-y-4">
                 {activeIncidents.map(inc => {
-                  const isCritical = inc.severity === 'critical';
-                  const dotColor = isCritical ? 'bg-accent-red' : inc.severity === 'moderate' ? 'bg-accent-amber' : 'bg-accent-green';
+                  const dist = calculateDistance(myLocation, inc.coordinates ? [inc.coordinates.lat, inc.coordinates.lng] : null);
                   return (
-                    <motion.div 
-                      key={inc.id} 
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      className="flex items-start p-4 hover:bg-slate-light transition cursor-pointer"
-                      onClick={() => handleAssignSelf(inc.id)}
-                    >
-                      <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${dotColor} ${isCritical ? 'animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]' : ''}`}></div>
-                      <div className="ml-4">
-                        <div className="font-bold text-white text-sm mb-1">{inc.title}</div>
-                        <div className="text-slate-400 text-xs flex items-center gap-1">
-                          <MapPin size={12} /> {inc.location}
-                        </div>
-                        <div className="text-slate-500 text-[10px] mt-2 uppercase tracking-widest">
-                           Click to take assignment
-                        </div>
-                      </div>
-                    </motion.div>
+                    <ResponderIncidentCard
+                      key={inc.id}
+                      incident={inc}
+                      isAssigned={false}
+                      dist={dist}
+                      onStatusUpdate={handleStatusUpdate}
+                      onAssignSelf={handleAssignSelf}
+                      globalLang={globalLang}
+                      setGlobalLang={setGlobalLang}
+                    />
                   )
                 })}
               </div>

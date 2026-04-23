@@ -144,3 +144,8 @@ h1, h2, h3, h4, h5, h6 {
 .spatial-interactable {
   pointer-events: auto;
 }
+
+@keyframes borderPulse {
+  0%, 100% { border-color: #FF3B3B; }
+  50% { border-color: rgba(255,59,59,0.3); }
+}

@@ -6,15 +6,69 @@ import ChatBox from '../components/ChatBox';
 import ReportModal from '../components/ReportModal';
 import ResQAIChat from '../components/ResQAIChat';
 import IncidentSidePanel from '../components/IncidentSidePanel';
+import AlertDraftPanel from '../components/AlertDraftPanel';
 import { useIncidents } from '../hooks/useIncidents';
 import { useAuth } from '../hooks/useAuth';
-import { Clock, MapPin, ShieldAlert, Navigation, Loader2, Plus } from 'lucide-react';
+import { Clock, MapPin, ShieldAlert, Navigation, Loader2, Plus, Bell, BellOff, X } from 'lucide-react';
 import { doc, updateDoc, collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 
+function playCriticalAlert() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const playBeep = (startTime, frequency, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(frequency, startTime);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(0.4, startTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
+    playBeep(ctx.currentTime, 880, 0.15);
+    playBeep(ctx.currentTime + 0.2, 880, 0.15);
+    playBeep(ctx.currentTime + 0.4, 1100, 0.3);
+  } catch (e) {
+    console.log('Audio not available:', e);
+  }
+}
+
+function playModerateAlert() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(440, ctx.currentTime);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch (e) {
+    console.log('Audio not available:', e);
+  }
+}
+
+function CountdownTimer({ expires }) {
+  const [remaining, setRemaining] = useState(Math.max(0, Math.ceil((expires - Date.now()) / 1000)));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setRemaining(Math.max(0, Math.ceil((expires - Date.now()) / 1000)));
+    }, 100);
+    return () => clearInterval(timer);
+  }, [expires]);
+
+  return <span className="text-[#5A6478] text-[11px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>{remaining}s</span>;
+}
+
 export default function Dashboard() {
-  const { incidents, loading } = useIncidents();
   const { user, role } = useAuth();
   const [time, setTime] = useState(new Date());
   const [selectedIncidentId, setSelectedIncidentId] = useState(null);
@@ -22,6 +76,49 @@ export default function Dashboard() {
   const [closingNote, setClosingNote] = useState('');
   const [personnel, setPersonnel] = useState([]);
   const [closureReportIncident, setClosureReportIncident] = useState(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState([]);
+  const [muted, setMuted] = useState(() => localStorage.getItem('resq_muted') === 'true');
+  const [toasts, setToasts] = useState([]);
+
+  const toggleMute = () => {
+    const newMuted = !muted;
+    setMuted(newMuted);
+    localStorage.setItem('resq_muted', String(newMuted));
+  };
+
+  const handleNewIncident = (incident) => {
+    const isMuted = localStorage.getItem('resq_muted') === 'true';
+    if (incident.severity === 'critical') {
+      if (!isMuted) playCriticalAlert();
+      
+      let flashes = 0;
+      const originalTitle = document.title;
+      const flashInterval = setInterval(() => {
+        document.title = document.title === "🔴 CRITICAL ALERT!" ? "ResQ Command" : "🔴 CRITICAL ALERT!";
+        flashes++;
+        if (flashes >= 20) {
+          clearInterval(flashInterval);
+          document.title = originalTitle;
+        }
+      }, 500);
+
+      const id = Date.now();
+      setToasts(prev => [...prev, { id, type: 'critical', incident }]);
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, 8000);
+    } else if (incident.severity === 'moderate') {
+      if (!isMuted) playModerateAlert();
+      
+      const id = Date.now();
+      setToasts(prev => [...prev, { id, type: 'moderate', incident }]);
+      setTimeout(() => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, 5000);
+    }
+  };
+
+  const { incidents, loading } = useIncidents({ onNewIncident: handleNewIncident });
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -214,6 +311,14 @@ export default function Dashboard() {
 
   const criticalActive = activeIncidents.some(i => i.severity === 'critical');
 
+  const pendingAlertIncident = activeIncidents
+    .filter(i => !i.alertSent && i.status !== 'resolved' && !dismissedAlerts.includes(i.id))
+    .sort((a, b) => {
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
+      return timeB - timeA;
+    })[0];
+
   const mapMarkers = incidents.filter(i => i.status !== 'resolved').map(inc => {
     if (inc.coordinates) {
       return { 
@@ -230,6 +335,46 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden print:h-auto print:overflow-visible print:bg-white">
+      {/* Toasts Container */}
+      <div className="fixed top-[60px] right-5 z-[9999] flex flex-col gap-2 pointer-events-none">
+        <AnimatePresence>
+          {toasts.map((toast) => (
+            <motion.div
+              key={toast.id}
+              initial={{ x: '100%', opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: '100%', opacity: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className={`w-[360px] bg-[#111318] rounded-[8px] p-4 pointer-events-auto shadow-2xl shrink-0 flex flex-col border-y border-r border-l-[4px] relative overflow-hidden ${
+                toast.type === 'critical' 
+                  ? 'border-[#FF3B3B] animate-borderPulse' 
+                  : 'border-[#F59E0B]'
+              }`}
+            >
+              <button 
+                onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+                className="absolute top-2 right-2 text-[#5A6478] hover:text-white"
+              >
+                <X size={16} />
+              </button>
+              <div className="flex justify-between items-center mb-1.5 pr-4">
+                <span className={`text-[11px] tracking-[0.1em] uppercase ${toast.type === 'critical' ? 'text-[#FF3B3B]' : 'text-[#F59E0B]'}`} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                  {toast.type === 'critical' ? '🔴 CRITICAL ALERT' : '🟡 NEW INCIDENT'}
+                </span>
+                {toast.expires && (
+                  <CountdownTimer expires={toast.expires} />
+                )}
+              </div>
+              <h4 className="text-[#E8EDF5] text-[14px] font-bold my-1.5" style={{ fontFamily: '"Syne", sans-serif' }}>
+                {toast.incident.title}
+              </h4>
+              <p className="text-[#5A6478] text-[12px]" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>
+                {toast.incident.location}
+              </p>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
       <AnimatePresence>
         {criticalActive && (
           <motion.div 
@@ -259,6 +404,13 @@ export default function Dashboard() {
               <Clock size={18} className="text-accent-blue" />
               {time.toLocaleTimeString()}
             </div>
+            <button 
+              onClick={toggleMute}
+              title={muted ? "Unmute alerts" : "Mute alerts"}
+              className="text-[#5A6478] hover:text-[#E8EDF5] transition p-2 flex items-center justify-center bg-transparent border-none cursor-pointer"
+            >
+              {muted ? <BellOff size={18} /> : <Bell size={18} />}
+            </button>
             <motion.button 
               whileTap={{ scale: 0.95 }}
               onClick={() => { setIsReportModalOpen(true); setSelectedIncidentId(null); }}
@@ -424,60 +576,81 @@ export default function Dashboard() {
                 </div>
 
                 {/* ROW 2: Active Personnel Roster */}
-                <div className="bg-[#111318] border border-[#1E2230] rounded-lg p-4 flex flex-col">
-                  <h4 className="text-[#5A6478] text-[10px] tracking-[0.12em] uppercase mb-3" style={{ fontFamily: '"JetBrains Mono", monospace' }}>ACTIVE PERSONNEL ROSTER</h4>
+                <div className="bg-[#111318] border border-[#1E2230] rounded-[8px] p-4 flex flex-col max-h-[280px]">
+                  <h4 className="text-[#5A6478] text-[10px] tracking-[0.1em] uppercase mb-3" style={{ fontFamily: '"JetBrains Mono", monospace' }}>ACTIVE PERSONNEL ROSTER</h4>
                   
-                  <div className="w-full overflow-x-auto">
-                    <div className="min-w-[600px] max-h-[240px] overflow-y-auto custom-scrollbar pr-2">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr>
-                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>NAME</th>
-                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>ROLE</th>
-                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>STATUS</th>
-                            <th className="pb-2 border-b border-[#1E2230] text-[#5A6478] text-[10px] tracking-[0.08em] uppercase font-normal" style={{ fontFamily: '"JetBrains Mono", monospace' }}>CURRENT INCIDENT</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {personnel.map((p, i) => {
-                            const initials = p.name ? p.name.split(' ').map(n => n[0]).join('').substring(0,2) : p.email?.substring(0,2).toUpperCase();
-                            
-                            let roleStyles = { bg: 'rgba(90,100,120,0.15)', text: '#5A6478', border: '#5A6478' };
-                            if (p.role === 'admin') roleStyles = { bg: 'rgba(255,59,59,0.15)', text: '#FF3B3B', border: '#FF3B3B' };
-                            else if (p.role === 'responder') roleStyles = { bg: 'rgba(59,130,246,0.15)', text: '#3B82F6', border: '#3B82F6' };
-                            
-                            return (
-                              <tr key={i} className="group hover:bg-white/5 transition-colors border-b border-white/5 h-[40px] last:border-0">
-                                <td className="py-2 flex items-center gap-3">
-                                  <div className="w-[28px] h-[28px] rounded-full flex items-center justify-center font-bold text-[11px]" style={{ backgroundColor: roleStyles.bg, color: roleStyles.text }}>
-                                    {initials}
-                                  </div>
-                                  <span className="text-[#E8EDF5] text-[13px] whitespace-nowrap" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>{p.name || p.email}</span>
-                                </td>
-                                <td className="py-2">
-                                  <span className="px-2 py-0.5 rounded-[4px] border text-[10px] uppercase tracking-[0.08em] bg-transparent whitespace-nowrap" style={{ borderColor: roleStyles.border, color: roleStyles.text, fontFamily: '"JetBrains Mono", monospace' }}>
-                                    {p.role || 'Reporter'}
-                                  </span>
-                                </td>
-                                <td className="py-2">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-[6px] h-[6px] rounded-full" style={{ backgroundColor: p.available !== false ? '#22D3A0' : '#5A6478' }}></div>
-                                    <span className="text-[#E8EDF5] text-[12px] whitespace-nowrap" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>{p.available !== false ? 'Active' : 'Offline'}</span>
-                                  </div>
-                                </td>
-                                <td className="py-2">
-                                  {p.currentIncident ? (
-                                    <span className="text-[#F59E0B] text-[12px] whitespace-nowrap" style={{ fontFamily: '"JetBrains Mono", monospace' }}>#{p.currentIncident.substring(0,6).toUpperCase()}</span>
-                                  ) : (
-                                    <span className="text-[#5A6478]">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                  {/* Summary Row */}
+                  <div className="flex gap-4 items-center mb-3 pb-2.5 border-b border-[#1E2230]">
+                    <div className="flex items-center gap-1.5 text-[#E8EDF5] text-[11px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                      <div className="w-[10px] h-[10px] rounded-full bg-[#22D3A0]"></div>
+                      {personnel.filter(p => p.available && !p.currentIncident).length} Available
                     </div>
+                    <div className="flex items-center gap-1.5 text-[#E8EDF5] text-[11px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                      <div className="w-[10px] h-[10px] rounded-full bg-[#F59E0B]"></div>
+                      {personnel.filter(p => p.available && p.currentIncident).length} On Duty
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[#E8EDF5] text-[11px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                      <div className="w-[10px] h-[10px] rounded-full bg-[#5A6478]"></div>
+                      {personnel.filter(p => !p.available).length} Offline
+                    </div>
+                  </div>
+
+                  {/* Responders List */}
+                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 flex flex-col">
+                    {personnel.length === 0 ? (
+                      <div className="flex items-center justify-center h-full min-h-[100px] border border-dashed border-[#1E2230] rounded text-[#5A6478] text-[13px]" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>
+                        No responders registered
+                      </div>
+                    ) : (
+                      (() => {
+                        const available = personnel.filter(p => p.available && !p.currentIncident);
+                        const onDuty = personnel.filter(p => p.available && p.currentIncident);
+                        const offline = personnel.filter(p => !p.available);
+                        const sortedPersonnel = [
+                          ...available.sort((a,b) => (a.name || a.email || '').localeCompare(b.name || b.email || '')),
+                          ...onDuty.sort((a,b) => (a.name || a.email || '').localeCompare(b.name || b.email || '')),
+                          ...offline.sort((a,b) => (a.name || a.email || '').localeCompare(b.name || b.email || ''))
+                        ];
+                        
+                        return sortedPersonnel.map((p, i) => {
+                          const initials = p.name ? p.name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase() : (p.email || 'U').substring(0,2).toUpperCase();
+                          const dept = p.department || 'other';
+                          
+                          let bg = 'rgba(90,100,120,0.15)', text = '#5A6478';
+                          if (dept === 'medical') { bg = 'rgba(245,158,11,0.15)'; text = '#F59E0B'; }
+                          else if (dept === 'security') { bg = 'rgba(255,59,59,0.15)'; text = '#FF3B3B'; }
+                          else if (dept === 'maintenance') { bg = 'rgba(59,130,246,0.15)'; text = '#3B82F6'; }
+
+                          const isAvailable = p.available && !p.currentIncident;
+                          const isOnDuty = p.available && p.currentIncident;
+
+                          return (
+                            <div key={i} className="flex items-center gap-[10px] h-[44px] border-b border-white/5 hover:bg-white/5 transition-colors shrink-0 px-2 rounded-sm cursor-default">
+                              <div className={`w-[10px] h-[10px] rounded-full shrink-0 ${isAvailable ? 'bg-[#22D3A0] animate-pulse' : isOnDuty ? 'bg-[#F59E0B]' : 'bg-[#5A6478]'}`}></div>
+                              <div className="w-[28px] h-[28px] rounded-full flex items-center justify-center text-[11px] font-bold shrink-0" style={{ backgroundColor: bg, color: text, fontFamily: '"Syne", sans-serif' }}>
+                                {initials}
+                              </div>
+                              <div className="flex flex-col flex-1 min-w-0">
+                                <span className="text-[#E8EDF5] text-[13px] truncate" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>{p.name || p.email}</span>
+                                <span className="text-[#5A6478] text-[10px] capitalize block truncate" style={{ fontFamily: '"JetBrains Mono", monospace' }}>{dept}</span>
+                              </div>
+                              <div className="flex flex-col items-end shrink-0">
+                                {isOnDuty ? (
+                                  <>
+                                    <span className="text-[#5A6478] text-[9px] uppercase" style={{ fontFamily: '"JetBrains Mono", monospace' }}>ON INCIDENT</span>
+                                    <span className="text-[#F59E0B] text-[10px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>#{p.currentIncident.substring(0,6).toUpperCase()}</span>
+                                  </>
+                                ) : isAvailable ? (
+                                  <span className="text-[#22D3A0] text-[9px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>AVAILABLE</span>
+                                ) : (
+                                  <span className="text-[#5A6478] text-[9px]" style={{ fontFamily: '"JetBrains Mono", monospace' }}>OFF DUTY</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()
+                    )}
                   </div>
                 </div>
               </div>
@@ -486,6 +659,25 @@ export default function Dashboard() {
         </motion.div>
       </div>
       <div className="print:hidden"><ResQAIChat /></div>
+      
+      {/* Floating Alert Draft Panel for pending unapproved incident */}
+      <AnimatePresence>
+        {!selectedIncidentId && pendingAlertIncident && (
+          <motion.div
+            initial={{ opacity: 0, x: 100 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 100 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="fixed bottom-6 right-6 z-40 w-[380px] shadow-2xl print:hidden"
+          >
+            <AlertDraftPanel 
+              incident={pendingAlertIncident} 
+              onClose={() => setDismissedAlerts(prev => [...prev, pendingAlertIncident.id])}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {selectedIncidentId && (
           <IncidentSidePanel 

@@ -1,5 +1,5 @@
 const apiKey = import.meta.env.VITE_GROQ_API_KEY || "demo-api-key";
-
+import { GoogleGenerativeAI } from '@google/generative-ai';
 const getMockResponse = async (title, type, description, location) => {
   await new Promise(resolve => setTimeout(resolve, 1500));
   const combinedText = `${title} ${type} ${description}`.toLowerCase();
@@ -149,5 +149,78 @@ Response time: ${responseMinutes} minutes`;
   } catch (error) {
     console.error("Error calling Groq API for closure report.", error);
     return "Error generating AI closure report. Manual review required.";
+  }
+}
+
+export async function generateAlertDraft(incident) {
+  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  const prompt = `You are an emergency alert system for a college campus. 
+Draft a concise WhatsApp/SMS alert message for the following 
+incident. The message will be sent to campus security and 
+staff. Keep it under 160 characters for SMS compatibility. 
+Be direct and urgent. Include: severity, what happened, 
+where, and what action to take.
+Format exactly like this:
+🚨 [SEVERITY] ALERT
+[What happened] at [location].
+[One action instruction].
+- ResQ Campus Command
+
+Incident data:
+Title: ${incident.title}
+Type: ${incident.type}
+Severity: ${incident.severity}
+Location: ${incident.location}
+Description: ${incident.description || 'No description provided.'}`;
+
+  if (!geminiApiKey || geminiApiKey === 'demo-api-key') {
+    // mock delay
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return `🚨 ${incident.severity.toUpperCase()} ALERT
+${incident.title} at ${incident.location || 'campus'}.
+Please avoid the area and follow instructions.
+- ResQ Campus Command`;
+  }
+
+  try {
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim();
+  } catch (error) {
+    console.error("Error generating alert draft", error);
+    return `🚨 ${incident.severity.toUpperCase()} ALERT
+${incident.title} at ${incident.location || 'campus'}.
+Please stand by for further instructions.
+- ResQ Campus Command`;
+  }
+}
+
+export async function translateIncidentText(text, targetLanguage) {
+  if (!text) return text;
+  
+  const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!geminiApiKey) {
+    console.warn("No Gemini API key available for translation. Falling back to original text.");
+    return text;
+  }
+
+  const prompt = `Translate the following emergency incident description 
+to ${targetLanguage}. Keep all proper nouns, location names, 
+and technical terms as they are. Maintain the urgency and 
+clarity of the original. Respond with ONLY the translated 
+text, nothing else, no explanation, no preamble.
+
+Original description (English):
+${text}`;
+
+  try {
+    const genAI = new GoogleGenerativeAI(geminiApiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    return result.response.text().trim();
+  } catch (error) {
+    console.error("Error translating text:", error);
+    throw error;
   }
 }
