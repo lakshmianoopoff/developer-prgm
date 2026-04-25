@@ -236,6 +236,10 @@ Firebase Studio (Antigravity) + AI-assisted development.
 
 ---
 
+## Deployed Link
+
+https://resq-edd87.web.app/
+
 ## 📄 License
 
 This project is licensed under the MIT License.
