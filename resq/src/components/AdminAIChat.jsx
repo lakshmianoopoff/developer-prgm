@@ -39,7 +39,7 @@ export default function AdminAIChat() {
       `- ${res.name} | ${res.department || 'General'} | ${res.available ? 'Available' : 'On Incident'} | Current: ${res.currentIncident || 'None'}`
     ).join('\n');
 
-    return `You are ResQ, an AI crisis command assistant for a college campus emergency response system. You have access to real-time campus incident data. Be concise, tactical, and clear. Use bullet points for lists. Never say you don't have access to data — the data is provided to you below.
+    return `You are ResQ, an AI crisis command assistant for a college campus emergency response system. You have access to real-time campus incident data. Be concise, tactical, and clear. Use bullet points for lists. If asked about general information, personnel who were fired, or data not in the active roster, politely explain that they are not in the current active roster or provide a general answer based on your knowledge.
 
 CURRENT CAMPUS STATUS:
 Active Incidents: ${activeIncidents.length}

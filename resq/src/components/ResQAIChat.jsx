@@ -22,6 +22,7 @@ export default function ResQAIChat() {
   
   // Real-time data state
   const [activeIncidents, setActiveIncidents] = useState([]);
+  const [recentResolvedIncidents, setRecentResolvedIncidents] = useState([]);
   const [responders, setResponders] = useState([]);
   const [resolvedTodayCount, setResolvedTodayCount] = useState(0);
   const [hasCritical, setHasCritical] = useState(false);
@@ -41,6 +42,7 @@ export default function ResQAIChat() {
   useEffect(() => {
     const unsubIncidents = onSnapshot(collection(db, 'incidents'), (snap) => {
       const active = [];
+      const resolved = [];
       let resolvedCount = 0;
       let criticalFound = false;
       
@@ -53,6 +55,7 @@ export default function ResQAIChat() {
           active.push({ id: doc.id, ...data });
           if (data.severity === 'critical') criticalFound = true;
         } else if (data.resolvedAt) {
+          resolved.push({ id: doc.id, ...data });
           const resolvedDate = data.resolvedAt.toDate ? data.resolvedAt.toDate() : new Date(data.resolvedAt);
           if (resolvedDate >= todayMidnight) {
             resolvedCount++;
@@ -60,7 +63,14 @@ export default function ResQAIChat() {
         }
       });
       
+      resolved.sort((a, b) => {
+        const tA = a.resolvedAt?.toMillis ? a.resolvedAt.toMillis() : new Date(a.resolvedAt).getTime();
+        const tB = b.resolvedAt?.toMillis ? b.resolvedAt.toMillis() : new Date(b.resolvedAt).getTime();
+        return tB - tA;
+      });
+      
       setActiveIncidents(active);
+      setRecentResolvedIncidents(resolved.slice(0, 10));
       setResolvedTodayCount(resolvedCount);
       setHasCritical(criticalFound);
     });
@@ -84,7 +94,13 @@ export default function ResQAIChat() {
     const inProgressCount = activeIncidents.filter(i => i.status === 'in_progress' || i.status === 'assigned').length;
     const availableCount = responders.filter(r => r.available).length;
 
-    let prompt = `You are ResQ, an AI crisis command assistant for a college campus emergency response system. You have real-time access to campus incident data provided below. Be concise, tactical, and clear. Use bullet points for lists. Format severity as 🔴 Critical, 🟡 Moderate, 🟢 Minor. Never say you cannot access data — it is all provided below. Keep responses under 150 words unless a full report is requested.\n\n`;
+    let prompt = `You are ResQ, an AI crisis command assistant for a college campus emergency response system. You have real-time access to ACTIVE and RECENTLY RESOLVED campus incident data provided below. Be concise, tactical, and clear. 
+
+IMPORTANT RULES:
+1. If a user asks about a specific person (e.g., "Sayona", a "terminated employee", etc.), or an event that is NOT in the active or resolved lists below, politely explain: "I currently only have visibility into active incidents and recent resolved incidents. I don't see any alerts regarding that. It may be an older incident archived outside my current database."
+2. If the person/event IS in the incidents below, provide the details immediately.
+3. Keep responses under 150 words unless a full report is requested.
+4. Format severity as 🔴 Critical, 🟡 Moderate, 🟢 Minor.\n\n`;
     
     prompt += `CURRENT CAMPUS STATUS:\n`;
     prompt += `Active Incidents: ${activeCount}\n`;
@@ -94,7 +110,7 @@ export default function ResQAIChat() {
 
     prompt += `ACTIVE INCIDENTS:\n`;
     if (activeIncidents.length === 0) {
-      prompt += "None.\n";
+      prompt += "None.\n\n";
     } else {
       activeIncidents.forEach(inc => {
         const sevIcon = inc.severity === 'critical' ? '🔴 Critical' : inc.severity === 'moderate' ? '🟡 Moderate' : '🟢 Minor';
@@ -103,6 +119,20 @@ export default function ResQAIChat() {
         prompt += `  Status: ${inc.status} | Assigned: ${inc.assignedName || 'Unassigned'}\n`;
         prompt += `  Reported: ${timeAgo}\n`;
         prompt += `  Description: ${inc.description}\n\n`;
+      });
+    }
+
+    prompt += `RECENTLY RESOLVED INCIDENTS (Last 10):\n`;
+    if (recentResolvedIncidents.length === 0) {
+      prompt += "None.\n\n";
+    } else {
+      recentResolvedIncidents.forEach(inc => {
+        const sevIcon = inc.severity === 'critical' ? '🔴 Critical' : inc.severity === 'moderate' ? '🟡 Moderate' : '🟢 Minor';
+        prompt += `- ID: ${inc.id} | ${sevIcon} | Type: ${inc.type} | Location: ${inc.location}\n`;
+        prompt += `  Status: Resolved | Resolved By: ${inc.assignedName || 'Unknown'}\n`;
+        prompt += `  Description: ${inc.description}\n`;
+        if (inc.closureReport) prompt += `  Closure Report: ${inc.closureReport}\n`;
+        prompt += `\n`;
       });
     }
 

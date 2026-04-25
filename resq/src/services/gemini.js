@@ -1,4 +1,5 @@
 const apiKey = import.meta.env.VITE_GROQ_API_KEY || "demo-api-key";
+export const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 import { GoogleGenerativeAI } from '@google/generative-ai';
 const getMockResponse = async (title, type, description, location) => {
   await new Promise(resolve => setTimeout(resolve, 1500));

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://placehold.co/1200x300/080b10/FF3B3B?text=ResQ+%E2%80%94+Campus+Crisis+Command" alt="ResQ Banner" width="100%"/>
+<img src="Screenshot_26-4-2026_02848_localhost.jpeg" alt="ResQ Banner" width="100%"/>
 
 <br/>
 <br/>

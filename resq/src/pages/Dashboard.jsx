@@ -6,7 +6,6 @@ import ChatBox from '../components/ChatBox';
 import ReportModal from '../components/ReportModal';
 import ResQAIChat from '../components/ResQAIChat';
 import IncidentSidePanel from '../components/IncidentSidePanel';
-import AlertDraftPanel from '../components/AlertDraftPanel';
 import { useIncidents } from '../hooks/useIncidents';
 import { useAuth } from '../hooks/useAuth';
 import { Clock, MapPin, ShieldAlert, Navigation, Loader2, Plus, Bell, BellOff, X } from 'lucide-react';
@@ -14,47 +13,9 @@ import { doc, updateDoc, collection, query, onSnapshot } from 'firebase/firestor
 import { db } from '../services/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { seedDemoData, clearDemoData } from '../services/seedData';
+import { playCriticalAlert, playModerateAlert } from '../utils/audio';
 
-function playCriticalAlert() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const playBeep = (startTime, frequency, duration) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(frequency, startTime);
-      gain.gain.setValueAtTime(0, startTime);
-      gain.gain.linearRampToValueAtTime(0.4, startTime + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-      osc.start(startTime);
-      osc.stop(startTime + duration);
-    };
-    playBeep(ctx.currentTime, 880, 0.15);
-    playBeep(ctx.currentTime + 0.2, 880, 0.15);
-    playBeep(ctx.currentTime + 0.4, 1100, 0.3);
-  } catch (e) {
-    console.log('Audio not available:', e);
-  }
-}
 
-function playModerateAlert() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.setValueAtTime(440, ctx.currentTime);
-    gain.gain.setValueAtTime(0.2, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.3);
-  } catch (e) {
-    console.log('Audio not available:', e);
-  }
-}
 
 function CountdownTimer({ expires }) {
   const [remaining, setRemaining] = useState(Math.max(0, Math.ceil((expires - Date.now()) / 1000)));
@@ -77,7 +38,6 @@ export default function Dashboard() {
   const [closingNote, setClosingNote] = useState('');
   const [personnel, setPersonnel] = useState([]);
   const [closureReportIncident, setClosureReportIncident] = useState(null);
-  const [dismissedAlerts, setDismissedAlerts] = useState([]);
   const [muted, setMuted] = useState(() => localStorage.getItem('resq_muted') === 'true');
   const [toasts, setToasts] = useState([]);
   const [isSeeding, setIsSeeding] = useState(false);
@@ -344,14 +304,6 @@ export default function Dashboard() {
   };
 
   const criticalActive = activeIncidents.some(i => i.severity === 'critical');
-
-  const pendingAlertIncident = activeIncidents
-    .filter(i => !i.alertSent && i.status !== 'resolved' && !dismissedAlerts.includes(i.id))
-    .sort((a, b) => {
-      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || 0).getTime();
-      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || 0).getTime();
-      return timeB - timeA;
-    })[0];
 
   const mapMarkers = incidents.filter(i => i.status !== 'resolved').map(inc => {
     if (inc.coordinates) {
@@ -694,23 +646,7 @@ export default function Dashboard() {
       </div>
       <div className="print:hidden"><ResQAIChat /></div>
       
-      {/* Floating Alert Draft Panel for pending unapproved incident */}
-      <AnimatePresence>
-        {!selectedIncidentId && pendingAlertIncident && (
-          <motion.div
-            initial={{ opacity: 0, x: 100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 100 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed bottom-6 right-6 z-40 w-[380px] shadow-2xl print:hidden"
-          >
-            <AlertDraftPanel 
-              incident={pendingAlertIncident} 
-              onClose={() => setDismissedAlerts(prev => [...prev, pendingAlertIncident.id])}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
+
 
       <AnimatePresence>
         {selectedIncidentId && (
