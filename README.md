@@ -8,7 +8,7 @@
 emergency response across reporters, responders, and administrators —
 in real time, in any language.
 
-[Live Demo](#) · [Report Bug](#) · [Request Feature](#)
+[Live Demo](#) · 
 
 </div>
 
