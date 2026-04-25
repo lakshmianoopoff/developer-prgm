@@ -2,18 +2,7 @@
 
 <img src="Screenshot_26-4-2026_02848_localhost.jpeg" alt="ResQ Banner" width="100%"/>
 
-<br/>
-<br/>
 
-<img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black"/>
-<img src="https://img.shields.io/badge/Firebase-Firestore-FFCA28?style=flat-square&logo=firebase&logoColor=black"/>
-<img src="https://img.shields.io/badge/Gemini-1.5%20Flash-4285F4?style=flat-square&logo=google&logoColor=white"/>
-<img src="https://img.shields.io/badge/Node.js-Express-339933?style=flat-square&logo=node.js&logoColor=white"/>
-<img src="https://img.shields.io/badge/Tailwind-CSS%20v4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white"/>
-<img src="https://img.shields.io/badge/License-MIT-22D3A0?style=flat-square"/>
-
-<br/>
-<br/>
 
 **ResQ** is an AI-powered campus crisis command center that coordinates
 emergency response across reporters, responders, and administrators —
@@ -58,12 +47,11 @@ what they need.
 | Role | What They See |
 |---|---|
 | **Reporter** | Incident submission form + status of their own reports |
-| **Responder** | Assigned incidents + AI instructions + multilingual support |
+| **Responder** | Assigned incidents + AI instructions |
 | **Admin** | Full tactical dashboard + live map + AI chat assistant |
 
 ### 🗺️ Tactical Command Dashboard
 - Live map with glowing incident markers via **Leaflet**
-- Real-time scrolling alert ticker for active critical incidents
 - Bento-grid layout with animated stat cards
 - Threat Vectors bar chart + Incidents Last 24H line chart
 - Active Personnel Roster with live availability status
@@ -73,21 +61,12 @@ what they need.
 - **Instant triage** — severity, type, response instructions
   generated in under 3 seconds
 - **AI Chat Assistant** — admin can ask *"summarise active
-  incidents"* or *"which area has the most threats today"*
-- **Auto-drafted alert messages** for WhatsApp/SMS approval
+  incidents"* or *"which area has the most threats today"*l
 - **AI Closure Reports** — auto-generated when incident resolves
-- **Real-time translation** into 6 languages for responders
 
-### 🌐 Multilingual Responder Interface
-Responders can read and hear incident details in their
-preferred language — powered entirely by Gemini API
-and Web Speech API.
-
-Supported languages:
-`English` `Malayalam` `Hindi` `Tamil` `Kannada` `Arabic`
 
 ### 🔊 Accessibility & Alerts
-- Text-to-Speech reads incident details aloud in selected language
+- Text-to-Speech reads incident details aloud
 - Critical sound alert (Web Audio API) when new critical
   incident arrives
 - Browser tab flashes on critical alert
@@ -244,7 +223,7 @@ campus incidents, responders, and users instantly.
 
 | Tactical Command Dashboard | Report Incident | Responder View |
 |---|---|---|
-| ![Dashboard](https://placehold.co/380x220/080b10/FF3B3B?text=Dashboard) | ![Report](https://placehold.co/380x220/080b10/3B82F6?text=Report+Form) | ![Responder](https://placehold.co/380x220/080b10/22D3A0?text=Responder) |
+| ![Dashboard](Screenshot_26-4-2026_03553_localhost.jpeg)  Screenshot_26-4-2026_04449_localhost.jpeg| ![Report](Screenshot_26-4-2026_03910_localhost.jpeg) | ![Responder](Screenshot_26-4-2026_04133_localhost.jpeg) |
 
 ---
 
@@ -252,7 +231,7 @@ campus incidents, responders, and users instantly.
 
 **Google Developers Virtual Hackathon**
 Track: Rapid Crisis Response — Open Innovation
-Built solo by **Lakshmi Anoop** in 3 days using
+Built solo by **Lakshmi Anoop**  using
 Firebase Studio (Antigravity) + AI-assisted development.
 
 ---
