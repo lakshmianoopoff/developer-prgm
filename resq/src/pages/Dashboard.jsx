@@ -13,6 +13,7 @@ import { Clock, MapPin, ShieldAlert, Navigation, Loader2, Plus, Bell, BellOff, X
 import { doc, updateDoc, collection, query, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
+import { seedDemoData, clearDemoData } from '../services/seedData';
 
 function playCriticalAlert() {
   try {
@@ -79,6 +80,39 @@ export default function Dashboard() {
   const [dismissedAlerts, setDismissedAlerts] = useState([]);
   const [muted, setMuted] = useState(() => localStorage.getItem('resq_muted') === 'true');
   const [toasts, setToasts] = useState([]);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleSeedData = async () => {
+    if (window.confirm("This will populate Firestore with demo data for presentation. Existing data will not be deleted. Continue?")) {
+      const id = Date.now();
+      setToasts(prev => [...prev, { id, type: 'moderate', incident: { title: 'Seeding demo data...', location: 'Please wait' } }]);
+      
+      try {
+        setIsSeeding(true);
+        await seedDemoData();
+        setToasts(prev => [...prev, { id: Date.now() + 1, type: 'moderate', incident: { title: '✓ Demo data loaded', location: 'Ready for presentation!' }, success: true }]);
+      } catch (e) {
+        setToasts(prev => [...prev, { id: Date.now() + 1, type: 'critical', incident: { title: 'Seeding Failed', location: 'Check console for errors' } }]);
+      } finally {
+        setIsSeeding(false);
+      }
+    }
+  };
+
+  const handleClearData = async () => {
+    if (window.confirm("This will delete all demo_ prefixed data from Firestore. Continue?")) {
+      try {
+        setIsClearing(true);
+        await clearDemoData();
+        setToasts(prev => [...prev, { id: Date.now(), type: 'moderate', incident: { title: 'Demo data cleared', location: 'Removed successfully' } }]);
+      } catch (e) {
+        setToasts(prev => [...prev, { id: Date.now(), type: 'critical', incident: { title: 'Clear Failed', location: 'Check console for errors' } }]);
+      } finally {
+        setIsClearing(false);
+      }
+    }
+  };
 
   const toggleMute = () => {
     const newMuted = !muted;
@@ -102,7 +136,7 @@ export default function Dashboard() {
         }
       }, 500);
 
-      const id = Date.now();
+      const id = Date.now() + Math.random();
       setToasts(prev => [...prev, { id, type: 'critical', incident }]);
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== id));
@@ -110,7 +144,7 @@ export default function Dashboard() {
     } else if (incident.severity === 'moderate') {
       if (!isMuted) playModerateAlert();
       
-      const id = Date.now();
+      const id = Date.now() + Math.random();
       setToasts(prev => [...prev, { id, type: 'moderate', incident }]);
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== id));
@@ -358,8 +392,8 @@ export default function Dashboard() {
                 <X size={16} />
               </button>
               <div className="flex justify-between items-center mb-1.5 pr-4">
-                <span className={`text-[11px] tracking-[0.1em] uppercase ${toast.type === 'critical' ? 'text-[#FF3B3B]' : 'text-[#F59E0B]'}`} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-                  {toast.type === 'critical' ? '🔴 CRITICAL ALERT' : '🟡 NEW INCIDENT'}
+                <span className={`text-[11px] tracking-[0.1em] uppercase ${toast.type === 'critical' ? 'text-[#FF3B3B]' : toast.success ? 'text-[#22D3A0]' : 'text-[#F59E0B]'}`} style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                  {toast.type === 'critical' ? '🔴 CRITICAL ALERT' : toast.success ? '✓ SUCCESS' : '🟡 NOTIFICATION'}
                 </span>
                 {toast.expires && (
                   <CountdownTimer expires={toast.expires} />
@@ -738,6 +772,27 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Demo Data Buttons */}
+      <div className="fixed bottom-6 left-6 z-[9999] flex flex-col gap-2 print:hidden">
+        <button
+          onClick={handleSeedData}
+          disabled={isSeeding || isClearing}
+          className="bg-[#111318] border border-[#1E2230] text-[#5A6478] px-3 py-1.5 rounded-[4px] hover:border-[#3B82F6] hover:text-[#3B82F6] transition-colors disabled:opacity-50"
+          style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '11px' }}
+        >
+          {isSeeding ? 'Seeding...' : '⚙ Load Demo Data'}
+        </button>
+        <button
+          onClick={handleClearData}
+          disabled={isSeeding || isClearing}
+          className="bg-[#111318] border border-[#1E2230] text-[#5A6478] px-3 py-1.5 rounded-[4px] hover:border-[#FF3B3B] hover:text-[#FF3B3B] transition-colors disabled:opacity-50"
+          style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: '11px' }}
+        >
+          {isClearing ? 'Clearing...' : '⚙ Clear Demo Data'}
+        </button>
+      </div>
+
     </div>
   );
 }

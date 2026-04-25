@@ -32,51 +32,133 @@ export default function ResponderIncidentCard({
   setGlobalLang
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [originalDescription] = useState(incident.description || 'No description provided.');
+  const [originalInstructions] = useState(incident.geminiTriage?.instructions || []);
+  const [displayedDescription, setDisplayedDescription] = useState(originalDescription);
+  const [displayedInstructions, setDisplayedInstructions] = useState(originalInstructions);
+  
   const [translations, setTranslations] = useState({
     EN: {
-      description: incident.description || 'No description provided.',
-      instructions: incident.geminiTriage?.instructions || []
+      description: originalDescription,
+      instructions: originalInstructions
     }
   });
+  
   const [isTranslating, setIsTranslating] = useState(false);
-  const [translationError, setTranslationError] = useState(false);
+  const [translationError, setTranslationError] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const utteranceRef = useRef(null);
 
-  const activeTranslation = translations[globalLang] || translations['EN'];
-
   // Handle translation when globalLang changes
   useEffect(() => {
-    if (globalLang === 'EN' || translations[globalLang]) {
-      setTranslationError(false);
-      return;
-    }
-
     let isMounted = true;
+    
     const fetchTranslation = async () => {
+      if (globalLang === 'EN') {
+        setDisplayedDescription(originalDescription);
+        setDisplayedInstructions(originalInstructions);
+        setTranslationError(null);
+        return;
+      }
+      
+      if (translations[globalLang]) {
+        setDisplayedDescription(translations[globalLang].description);
+        setDisplayedInstructions(translations[globalLang].instructions);
+        setTranslationError(null);
+        return;
+      }
+
       setIsTranslating(true);
-      setTranslationError(false);
+      setTranslationError(null);
+      
+      const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+      console.log('Gemini key available:', !!GEMINI_API_KEY);
+      
+      const langName = LANG_MAP[globalLang];
+      
       try {
-        const [translatedDesc, translatedInst] = await Promise.all([
-          translateIncidentText(incident.description || 'No description provided.', LANG_MAP[globalLang]),
-          translateIncidentText((incident.geminiTriage?.instructions || []).join('\n'), LANG_MAP[globalLang])
+        console.log(`Translating to ${langName}...`);
+        
+        const [descResponse, instrResponse] = await Promise.all([
+          fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [{
+                    text: `Translate the following emergency incident description to ${langName}. Keep all proper nouns, location names, and technical terms as they are. Maintain urgency and clarity. Respond with ONLY the translated text, nothing else, no explanation, no preamble, no quotes.\n\nOriginal English text:\n${originalDescription}`
+                  }]
+                }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 500 }
+              })
+            }
+          ),
+          fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [{
+                    text: `Translate the following emergency response instructions to ${langName}. Keep numbered format. Keep all proper nouns and technical terms as they are. Respond with ONLY the translated numbered list, nothing else, no preamble, no quotes.\n\nOriginal English instructions:\n${Array.isArray(originalInstructions) ? originalInstructions.map((s,i) => `${i+1}. ${s}`).join('\n') : originalInstructions}`
+                  }]
+                }],
+                generationConfig: { temperature: 0.1, maxOutputTokens: 500 }
+              })
+            }
+          )
         ]);
 
+        if (!descResponse.ok) {
+          const errText = await descResponse.text();
+          console.error('Description translation failed:', errText);
+          throw new Error(`Gemini API error: ${descResponse.status}`);
+        }
+        
+        if (!instrResponse.ok) {
+          const errText = await instrResponse.text();
+          console.error('Instructions translation failed:', errText);
+          throw new Error(`Gemini API error: ${instrResponse.status}`);
+        }
+
+        const descData = await descResponse.json();
+        const instrData = await instrResponse.json();
+        
+        console.log('Translation response:', descData);
+        
+        const translatedDesc = descData?.candidates?.[0]?.content?.parts?.[0]?.text || originalDescription;
+        const translatedInstr = instrData?.candidates?.[0]?.content?.parts?.[0]?.text || originalInstructions;
+        
+        let parsedInstr = translatedInstr;
+        if (typeof translatedInstr === 'string') {
+          parsedInstr = translatedInstr.split('\n').filter(line => line.trim() !== '');
+        }
+        
         if (isMounted) {
           setTranslations(prev => ({
             ...prev,
             [globalLang]: {
               description: translatedDesc,
-              instructions: translatedInst.split('\n').filter(line => line.trim() !== '')
+              instructions: parsedInstr
             }
           }));
+          
+          setDisplayedDescription(translatedDesc);
+          setDisplayedInstructions(parsedInstr);
+          console.log(`Translation to ${langName} successful`);
         }
       } catch (error) {
-        console.error("Translation failed:", error);
+        console.error('Translation error:', error);
         if (isMounted) {
-          setTranslationError(true);
-          // If translation fails, revert back to EN pill
+          setDisplayedDescription(originalDescription);
+          setDisplayedInstructions(originalInstructions);
           setGlobalLang('EN');
+          localStorage.setItem('resq_responder_lang', 'EN');
+          setTranslationError('Translation unavailable. Showing English.');
+          setTimeout(() => setTranslationError(null), 3000);
         }
       } finally {
         if (isMounted) setIsTranslating(false);
@@ -85,7 +167,7 @@ export default function ResponderIncidentCard({
 
     fetchTranslation();
     return () => { isMounted = false; };
-  }, [globalLang, incident.description, incident.geminiTriage?.instructions, setGlobalLang, translations]);
+  }, [globalLang]);
 
   // Clean up speech synthesis when unmounting or switching languages/cards
   useEffect(() => {
@@ -102,42 +184,62 @@ export default function ResponderIncidentCard({
   }, [globalLang]);
 
   const speakDescription = () => {
-    if (!window.speechSynthesis) return;
+    window.speechSynthesis?.cancel();
 
     if (isPlaying) {
-      window.speechSynthesis.cancel();
       setIsPlaying(false);
       return;
     }
 
-    window.speechSynthesis.cancel();
-
-    const textToSpeak = `${incident.title}, ${activeTranslation.description}`;
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    const textToSpeak = `${incident.title}. ${displayedDescription}`;
+    const langCode = TTS_LANG_MAP[globalLang] || 'en-IN';
     
-    utterance.lang = TTS_LANG_MAP[globalLang] || 'en-IN';
-    utterance.rate = 0.9;
+    console.log(`Speaking in language: ${langCode}`);
+    console.log(`Text: ${textToSpeak.substring(0, 50)}...`);
+
+    const utterance = new SpeechSynthesisUtterance(textToSpeak);
+    utterance.lang = langCode;
+    utterance.rate = 0.85;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
 
-    const voices = window.speechSynthesis.getVoices();
-    const targetLangPrefix = utterance.lang.split('-')[0];
-    let matchingVoice = voices.find(v => v.lang.startsWith(targetLangPrefix));
-    
-    if (!matchingVoice) {
-      matchingVoice = voices.find(v => v.lang.startsWith('en'));
-    }
-    
-    if (matchingVoice) {
-      utterance.voice = matchingVoice;
-    }
+    const setVoiceAndSpeak = () => {
+      const voices = window.speechSynthesis.getVoices();
+      console.log('Available voices:', voices.map(v => v.lang).join(', '));
+      
+      const exactMatch = voices.find(v => v.lang === langCode);
+      const partialMatch = voices.find(v => v.lang.startsWith(langCode.split('-')[0]));
+      const fallback = voices.find(v => v.lang === 'en-IN');
+      
+      const selectedVoice = exactMatch || partialMatch || fallback || voices[0];
+      
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        console.log('Using voice:', selectedVoice.name, selectedVoice.lang);
+      }
 
-    utterance.onstart = () => setIsPlaying(true);
-    utterance.onend = () => setIsPlaying(false);
-    utterance.onerror = () => setIsPlaying(false);
+      utterance.onstart = () => {
+        setIsPlaying(true);
+        console.log('Speech started');
+      };
+      utterance.onend = () => {
+        setIsPlaying(false);
+        console.log('Speech ended');
+      };
+      utterance.onerror = (e) => {
+        setIsPlaying(false);
+        console.error('Speech error:', e);
+      };
 
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
+      utteranceRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    };
+
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = setVoiceAndSpeak;
+    } else {
+      setVoiceAndSpeak();
+    }
   };
 
   const isCritical = incident.severity === 'critical';
@@ -229,14 +331,16 @@ export default function ResponderIncidentCard({
             {isTranslating ? <Loader2 size={14} className="animate-spin" /> : isPlaying ? <Square size={12} fill="currentColor" /> : <Volume2 size={14} />}
           </button>
         )}
-        <div className="ml-auto text-[#5A6478] text-[9px] shrink-0 whitespace-nowrap" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>
-          Powered by Gemini
-        </div>
+        {globalLang !== 'EN' && (
+          <div className="ml-auto text-[#5A6478] text-[10px] shrink-0 whitespace-nowrap italic" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>
+            🌐 Translated by Gemini AI
+          </div>
+        )}
       </div>
 
       {/* Description Text Area */}
       <div 
-        className="bg-[#0A0C10] border border-[#1E2230] rounded-[4px] p-[10px_12px] min-h-[60px] relative mb-4 transition-all"
+        className={`bg-[#0A0C10] border border-[#1E2230] rounded-[4px] p-[10px_12px] min-h-[60px] relative mb-4 transition-all ${isTranslating ? 'opacity-50' : ''}`}
         style={{ fontFamily: '"Instrument Sans", sans-serif', fontSize: '14px', color: '#E8EDF5', lineHeight: '1.7', direction: isRtl ? 'rtl' : 'ltr', textAlign: isRtl ? 'right' : 'left' }}
       >
         {isTranslating ? (
@@ -244,18 +348,27 @@ export default function ResponderIncidentCard({
             <div className="h-3 bg-gradient-to-r from-[#1E2230] to-[#2A3040] rounded w-full"></div>
             <div className="h-3 bg-gradient-to-r from-[#1E2230] to-[#2A3040] rounded w-5/6"></div>
             <div className="h-3 bg-gradient-to-r from-[#1E2230] to-[#2A3040] rounded w-4/6"></div>
+            <div className="text-[#F59E0B] text-[10px] mt-2 font-bold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+              Translating...
+            </div>
           </div>
         ) : (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-            {activeTranslation.description}
+            {displayedDescription}
           </motion.div>
         )}
       </div>
       
       {translationError && (
-        <div className="text-[#5A6478] text-[11px] mb-4" style={{ fontFamily: '"Instrument Sans", sans-serif' }}>
-          Translation unavailable
-        </div>
+        <p style={{
+          color: '#FF3B3B',
+          fontFamily: 'JetBrains Mono',
+          fontSize: '11px',
+          marginTop: '-10px',
+          marginBottom: '16px'
+        }}>
+          {translationError}
+        </p>
       )}
 
       {/* Assigned Controls & Content */}
@@ -308,7 +421,7 @@ export default function ResponderIncidentCard({
                       </div>
                     ) : (
                       <ol className={`list-decimal text-sm text-[#E8EDF5] space-y-2 ${isRtl ? 'pr-4' : 'pl-4'}`} style={{ fontFamily: '"Instrument Sans", sans-serif' }}>
-                        {activeTranslation.instructions.map((inst, i) => <li key={i}>{inst.replace(/^\d+\.\s*/, '')}</li>)}
+                        {displayedInstructions.map((inst, i) => <li key={i}>{typeof inst === 'string' ? inst.replace(/^\d+\.\s*/, '') : inst}</li>)}
                       </ol>
                     )}
                   </div>
